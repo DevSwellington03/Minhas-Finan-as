@@ -1,1 +1,43 @@
+import React from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { format, differenceInDays } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { AlertCircle, CheckCircle } from "lucide-react";
+
+export default function UpcomingBills({ transactions, categories, isLoading }) {
+  if (isLoading) {
+    return (
+      <Card className="border-none shadow-lg">
+        <CardHeader>
+          <CardTitle>Contas a Vencer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse p-3 bg-gray-100 rounded-lg">
+                <div className="h-4 bg-gray-200 rounded w-32 mb-2" />
+                <div className="h-3 bg-gray-200 rounded w-24" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const today = new Date();
+  const upcomingBills = transactions
+    ?.filter(t => !t.paid && t.type === 'expense')
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 5) || [];
+
+  const getCategoryName = (categoryId) => {
+    const category = categories?.find(c => c.id === categoryId);
+    return category?.name || 'Sem categoria';
+  };
+
+  const getDaysUntil = (date) => {
+    return differenceInDays(new Date(date), today);
+  };
 
