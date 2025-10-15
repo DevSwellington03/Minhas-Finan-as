@@ -1,0 +1,139 @@
+import React, { useMemo } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { Wallet, TrendingUp, TrendingDown, DollarSign, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { startOfMonth, endOfMonth, format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+import StatCard from "../components/dashboard/StatCard";
+import ExpenseChart from "../components/dashboard/ExpenseChart";
+import RecentTransactions from "../components/dashboard/RecentTransactions";
+import UpcomingBills from "../components/dashboard/UpcomingBills";
+
+export default function Dashboard() {
+  const currentMonth = format(new Date(), 'yyyy-MM');
+  const monthStart = startOfMonth(new Date());
+  const monthEnd = endOfMonth(new Date());
+
+  const { data: transactions, isLoading: loadingTransactions } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: () => base44.entities.Transaction.list('-date'),
+    initialData: [],
+  });
+
+  const { data: categories, isLoading: loadingCategories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => base44.entities.Category.list(),
+    initialData: [],
+  });
+
+  const currentMonthTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const transDate = new Date(t.date);
+      return transDate >= monthStart && transDate <= monthEnd;
+    });
+  }, [transactions, monthStart, monthEnd]);
+
+  const stats = useMemo(() => {
+    const income = currentMonthTransactions
+      .filter(t => t.type === 'income' && t.paid)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const expenses = currentMonthTransactions
+      .filter(t => t.type === 'expense' && t.paid)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const balance = income - expenses;
+
+    return { income, expenses, balance };
+  }, [currentMonthTransactions]);
+
+  const expensesByCategory = useMemo(() => {
+    const categoryMap = {};
+    
+    currentMonthTransactions
+      .filter(t => t.type === 'expense' && t.paid)
+      .forEach(t => {
+        const category = categories.find(c => c.id === t.category_id);
+        const categoryName = category?.name || 'Outros';
+        categoryMap[categoryName] = (categoryMap[categoryName] || 0) + t.amount;
+      });
+
+    return Object.entries(categoryMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [currentMonthTransactions, categories]);
+
+  return (
+    <div className="p-4 md:p-8 min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+              Dashboard Financeiro
+            </h1>
+            <p className="text-gray-600">Visão geral das suas finanças em {format(new Date(), 'MMMM yyyy', { locale: ptBR })}</p>
+          </div>
+          <Link to={createPageUrl("Transactions")}>
+            <Button className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg">
+              <Plus className="w-5 h-5 mr-2" />
+              Nova Transação
+            </Button>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <StatCard
+            title="Saldo Atual"
+            value={`R$ ${stats.balance.toFixed(2)}`}
+            icon={Wallet}
+            color="blue"
+            trend={stats.balance >= 0 ? 'up' : 'down'}
+            trendValue={`${Math.abs(((stats.balance / (stats.income || 1)) * 100)).toFixed(1)}%`}
+          />
+          <StatCard
+            title="Receitas do Mês"
+            value={`R$ ${stats.income.toFixed(2)}`}
+            icon={TrendingUp}
+            color="emerald"
+          />
+          <StatCard
+            title="Despesas do Mês"
+            value={`R$ ${stats.expenses.toFixed(2)}`}
+            icon={TrendingDown}
+            color="rose"
+          />
+          <StatCard
+            title="Total de Transações"
+            value={currentMonthTransactions.length}
+            icon={DollarSign}
+            color="amber"
+          />
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2">
+            <ExpenseChart 
+              data={expensesByCategory} 
+              isLoading={loadingTransactions || loadingCategories}
+            />
+          </div>
+          <UpcomingBills 
+            transactions={transactions}
+            categories={categories}
+            isLoading={loadingTransactions || loadingCategories}
+          />
+        </div>
+
+        <RecentTransactions 
+          transactions={transactions}
+          categories={categories}
+          isLoading={loadingTransactions || loadingCategories}
+        />
+      </div>
+    </div>
+  );
+}
